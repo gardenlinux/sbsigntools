@@ -269,6 +269,16 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	const char *fake_time = getenv("SBSIGN_FAKETIME");
+	if (fake_time) {
+		time_t unix_time = strtoul(fake_time, NULL, 10);
+		fprintf(stderr, "SBSIGN_FAKETIME=%lu\n", unix_time);
+		ASN1_TIME *asn1_time = ASN1_TIME_set(NULL, unix_time);
+
+		PKCS7_add0_attrib_signing_time(si, asn1_time);
+		ASN1_TIME_free(asn1_time);
+	}
+
 	PKCS7_content_new(p7, NID_pkcs7_data);
 
 	rc = IDC_set(p7, si, ctx->image);
@@ -300,4 +310,3 @@ int main(int argc, char **argv)
 
 	return EXIT_SUCCESS;
 }
-
