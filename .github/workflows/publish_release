@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -eufo pipefail
+
+curl_path="$(which curl)"
+
+function curl {
+	$curl_path -sS -f -u "token:$token" "$@"
+}
+
+function get {
+	[ $# = 1 ]
+	curl -X GET "https://api.github.com/repos/$repo/$1"
+}
+
+function post {
+	[ $# = 2 ]
+	curl -X POST "https://api.github.com/repos/$repo/$1" --data "$2"
+}
+
+function delete {
+	[ $# = 1 ]
+	curl -X DELETE "https://api.github.com/repos/$repo/$1"
+}
+
+function upload {
+	[ $# = 1 ]
+	curl -X POST -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/$repo/$1" --data-binary @-
+}
+
+token="$1"
+repo="$2"
+tag="$3"
+name="$4"
+body="$5"
+
+release="$(get "releases/tags/$tag" | jq -r '.id' || true)"
+[ ! "$release" ] || delete "releases/$release"
+
+release="$(post "releases" '{
+	"tag_name": "'"$tag"'",
+	"name": "'"$name"'",
+	"body": "'"$body"'"
+}' | jq -r '.id')"
+
+echo "created release $release"
+
+while read file; do
+	asset_name="$(basename "$file")"
+	upload "releases/$release/assets?name=$asset_name" < "$file" > /dev/null
+	echo "uploaded $file to $release"
+done

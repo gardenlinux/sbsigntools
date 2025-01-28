@@ -1,0 +1,45 @@
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ amd64, arm64 ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gardenlinux/gh-action-podman-run@main
+        with:
+          arch: ${{ matrix.arch }}
+          mounts: "${{ github.workspace }}:/mnt"
+          run: |
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git build-essential binutils-dev libssl-dev pkg-config automake help2man gnu-efi uuid-dev
+            cd /mnt
+            ./autogen.sh
+            ./configure
+            make -j $(nproc)
+      - run: mv src/sbsign sbsign-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}
+          path: sbsign-${{ matrix.arch }}
+  release:
+    needs: build
+    if: ${{ github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64
+      - name: tag and release
+        run: |
+          git tag --force latest
+          git push --force origin latest
+          .github/workflows/publish_release ${{ secrets.GITHUB_TOKEN }} ${{ github.repository }} latest "$(basename '${{ github.repository }}')" 'created by GitHub actions run [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})' << EOF
+          sbsign-amd64
+          sbsign-arm64
+          EOF
